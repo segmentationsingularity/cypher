@@ -483,7 +483,7 @@ MENU_HEADER() {
 MENU_FOOTER() {
     INVERT
     POSITION 21 5
-    $E "\033[36m              UP \xE2\x86\x91 \xE2\x86\x93 DOWN    ENTER - SELECT,NEXT              \033[0m"
+    $E "\033[36m              UP \xE2\x86\x91 \xE2\x86\x93 DOWN   \xe2\x86\xb5 ENTER - SELECT,NEXT              \033[0m"
     UNINVERT
 }
 
