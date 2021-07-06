@@ -31,6 +31,8 @@ TCPportArray=(${P2P_PORT})
 # Required packages
 packageArray=(openssl libssl-dev curl libgmp-dev jq netcat nmap)
 
+# expected files
+requiredFiles=(linux/cypher run.sh start.sh resetStart.sh)
 # Set bash Colours
 CBlack='\033[0;30m'
 CGreen='\033[0;32m'
@@ -63,6 +65,7 @@ ESC=$($e "\e")
 # Init
 i=0
 LM=8
+_coinBase=""
 
 ###############################################
 #                  FUNCTIONS                  #
@@ -343,22 +346,21 @@ MINER_HEALTHCHECK() {
         minerStatus=$(GET_MINER_STATUS)
         decimalKeyBlock=$(GET_DECIMAL_KEY_BLOCK)
         hexadecimalKeyBlock=$(DECIMAL_TO_HEXADECIMAL ${decimalKeyBlock})
-        coinBase=$(GET_COINBASE)
-        balance=$(GET_BALANCE ${coinBase})
+        balance=$(GET_BALANCE ${_coinBase})
 
         MSG INFO "Miner process (cypher) running with pid [${pid}]"
         MSG INFO "Miner status is: [${minerStatus}]"
         MSG INFO "Current keyblok in decimal [${decimalKeyBlock}] in hexadecimal [${hexadecimalKeyBlock}]"
-        MSG INFO "Coinbase is: [${coinBase}]"
+        MSG INFO "Coinbase is: [${_coinBase}]"
         MSG INFO "Balance is: hexidecimal [${balance}] decimal balance [$(HEXADECIMAL_TO_DECIMAL ${balance})] balance in cph [$(DIVIDE_BY_QUINTILLION $(HEXADECIMAL_TO_DECIMAL ${balance}) 4)]"
 
-        IS_COINBASE_IN_COMMITTEE "${hexadecimalKeyBlock}" "${coinBase}" && {
+        IS_COINBASE_IN_COMMITTEE "${hexadecimalKeyBlock}" "${_coinBase}" && {
             MSG PASSED "Coinbase is in committee for current keyblock"
         } || {
             MSG WARNING "Coinbase is NOT in committee for current keyblock"
         }
 
-        IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hexadecimalKeyBlock}" "${coinBase}" && {
+        IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hexadecimalKeyBlock}" "${_coinBase}" && {
             MSG WARNING "Coinbase IS in committee exception for current keyblock"
         } || {
             MSG PASSED "Coinbase is not in committee exception for current keyblock"
@@ -392,15 +394,14 @@ SCAN_FOR_STATUS() {
             u_endKeyBlock=${u_endKeyBlock:-${currentKeyblock}}
         done
 
-        coinBase=$(GET_COINBASE)
         MSG INFO "Start scan for keyblock ${u_startKeyBlock} to ${u_endKeyBlock}"
 
         for p in $(eval echo "{${u_startKeyBlock}..${u_endKeyBlock}}"); do
             hex=$(DECIMAL_TO_HEXADECIMAL "${p}")
-            IS_COINBASE_IN_COMMITTEE "${hex}" "${coinBase}" && {
-               MSG INFO "KEY BLOCK ${p} ${hex} ${coinBase} in committee${MESSAGE}"
+            IS_COINBASE_IN_COMMITTEE "${hex}" "${_coinBase}" && {
+               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} in committee${MESSAGE}"
             } || {
-               MSG INFO "KEY BLOCK ${p} ${hex} ${coinBase} not in committee${MESSAGE}"
+               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} not in committee${MESSAGE}"
             }
         done
     } || {
@@ -451,7 +452,7 @@ FULLRESET_TERMINAL() {
 
 MENU_HEADER() {
     # Draw the sides of the menu
-    for each in $(seq 1 21);do
+    for each in $(seq 1 22);do
         $E "   \xE2\x94\x82                                                              \xE2\x94\x82 "
     done
 
@@ -465,25 +466,30 @@ MENU_HEADER() {
         $E "     Cypher process is running with pid [${pid}]"
         POSITION 4 5
         $E "     Miner status [${minerStatus}]"
+        POSITION 5 5
+        if [[ -z ${_coinBase} ]]; then _coinBase=$(GET_COINBASE); fi
+        $E "     Balance in cph [$(DIVIDE_BY_QUINTILLION $(HEXADECIMAL_TO_DECIMAL $(GET_BALANCE ${_coinBase})) 4)]"
     } || {
         POSITION 3 5
         $E "     Cypher process not running"
         POSITION 4 5
         $E "     Miner not running"
+        POSITION 5 5
+        $E "     Balance not available"
     }
     INVERT
-    POSITION 6 5
+    POSITION 7 5
     $E "\033[36m                         SELECT OPTION                        \033[0m"
     UNINVERT
 
-    INVERT; POSITION 8 5; $E "\033[94m     CONTROL\033[0m"; UNINVERT
-    INVERT; POSITION 14 5; $E "\033[94m     CHECKS\033[0m"; UNINVERT
+    INVERT; POSITION 9 5; $E "\033[94m     CONTROL\033[0m"; UNINVERT
+    INVERT; POSITION 15 5; $E "\033[94m     CHECKS\033[0m"; UNINVERT
 }
 
 MENU_FOOTER() {
     INVERT
-    POSITION 21 5
-    $E "\033[36m              UP \xE2\x86\x91 \xE2\x86\x93 DOWN   \xe2\x86\xb5 ENTER - SELECT,NEXT              \033[0m"
+    POSITION 22 5
+    $E "\033[36m              UP \xE2\x86\x91 \xE2\x86\x93 DOWN  \xe2\x86\xb5 ENTER - SELECT,NEXT              \033[0m"
     UNINVERT
 }
 
@@ -592,54 +598,61 @@ ESCAPE_TO_MAIN() {
 }
 
 M0() {
-    POSITION 9 10
+    POSITION 10 10
     $e "Start miner process"
 }
 
 M1() {
-    POSITION 10 10
+    POSITION 11 10
     $e "Start mining"
 }
 
 
 M2() {
-    POSITION 11 10
+    POSITION 12 10
     $e "Stop miner process"
 }
 
 M3() {
-    POSITION 12 10
+    POSITION 13 10
     $e "Stop mining"
 }
 
 M4() {
-    POSITION 15 10
+    POSITION 16 10
     $e "Check ports"
 }
 
 M5() {
-    POSITION 16 10
+    POSITION 17 10
     $e "Miner healthcheck"
 }
 
 M6() {
-    POSITION 17 10
+    POSITION 18 10
     $e "Scan for committee status in keyblocks"
 }
 
 M7() {
-    POSITION 18 10
+    POSITION 19 10
     $e "Scan for committee status exception in keyblocks"
 }
 
 M8() {
-    POSITION 19 10
+    POSITION 20 10
     $e "EXIT"
 }
 
 #################################################################
 #                            Precheck                           #
 #################################################################
+# Check if expected files exist
+for currentFile in ${requiredFiles}
+do
+    if ! [[ -f ${currentFile} && -x ${currentFile} ]]; then
+        MSG ERROR  "${currentFile} not accesible from current location, exiting\n"; exit 1
+    fi
+done
 # Check root
 clear
 if [[ $EUID -ne 0 ]]; then
@@ -679,6 +692,7 @@ RESET_TERMINAL
 HIDE_CURSOR
 NULL=/dev/null
 INIT
+
 
 while [[ "$O" != " " ]]; do
     # MENU_POSITION sets i each loop
