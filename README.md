@@ -15,4 +15,5 @@ Some simple bash scripts for the Cypherium miner
 	./menu.sh
 
 # Screenshot
-![alt text](https://github.com/segmentationsingularity/cypher/blob/master/menu.jpg?raw=true)
+![alt text](https://github.com/segmentationsingularity/cypher/blob/99e372efb96437d6da8977478094070af035b516/menu.jpg?raw=true)
+            
