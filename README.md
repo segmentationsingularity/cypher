@@ -6,7 +6,7 @@ Some simple bash scripts for the Cypherium miner
 	cd ~/cypherBFTBin
 	
 3. download the menu script</br>
-	curl -fsSL https://raw.githubusercontent.com/segmentationsingularity/cypher/master/menu.sh
+	wget https://raw.githubusercontent.com/segmentationsingularity/cypher/master/menu.sh
 	
 5. Make sure the script is executable</br>
 	chmod +x menu.sh
