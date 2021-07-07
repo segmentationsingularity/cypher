@@ -398,7 +398,7 @@ SCAN_FOR_STATUS() {
 
         for p in $(eval echo "{${u_startKeyBlock}..${u_endKeyBlock}}"); do
             hex=$(DECIMAL_TO_HEXADECIMAL "${p}")
-            IS_COINBASE_IN_COMMITTEE "${hex}" "${_coinBase}" && {
+            ${FUNCTION_NAME} "${hex}" "${_coinBase}" && {
                MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} in committee${MESSAGE}"
             } || {
                MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} not in committee${MESSAGE}"
