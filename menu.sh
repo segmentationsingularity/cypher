@@ -3,7 +3,7 @@
 #
 # Script         :                    menu.sh
 # Description    :                    Simple bash convenience menu.
-# version        :                    0.1
+# version        :                    0.2
 # Initial Authors:                    CODE_ERROR
 # Initial Date   :                    2021.07.01
 # Initial Source :                    -
@@ -159,9 +159,13 @@ PACKAGE_INSTALLED() {
     return 0
 }
 
+GET_CURRENT_TX_BLOCK() {
+    echo $(curl --silent -X POST -H "Content-Type: application/json" --data '{"id":"1", "method": "cph_txBlockNumber"}' 0.0.0.0:${RPC_PORT} | jq -r '.result')
+}
+
 GET_BALANCE() {
     # Requires coinbase as argument 1
-    echo $(curl --silent -X POST -H "Content-Type: application/json" --data '{"method": "cph_getBalance", "params": ["'${1}'", "latest"], "id":"1"}' 0.0.0.0:8000 | jq -r '.result')
+    echo $(curl --silent -X POST -H "Content-Type: application/json" --data '{"method": "cph_getBalance", "params": ["'${1}'", "latest"], "id":"1"}' 0.0.0.0:${RPC_PORT} | jq -r '.result')
 }
 
 DIVIDE_BY_QUINTILLION() {
@@ -360,21 +364,101 @@ MINER_HEALTHCHECK() {
             MSG WARNING "Coinbase is NOT in committee for current keyblock"
         }
 
-        IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hexadecimalKeyBlock}" "${_coinBase}" && {
-            MSG WARNING "Coinbase IS in committee exception for current keyblock"
+        # Change to hexadecimal tx block
+        hexadecimalTxBlock=$(GET_CURRENT_TX_BLOCK)
+        IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hexadecimalTxBlock}" "${_coinBase}" && {
+            MSG WARNING "Coinbase is in committee exception for current tx block"
         } || {
-            MSG PASSED "Coinbase is not in committee exception for current keyblock"
+            MSG PASSED "Coinbase is not in committee exception for current tx block"
         }
     } || {
         MSG WARNING "Cannot perform health check, miner process not running"
     }
 }
 
-SCAN_FOR_STATUS() {
-    FUNCTION_NAME="IS_COINBASE_IN_COMMITTEE"
-    MESSAGE=""
-    if [[ "${1}" == "EXCEPTION" ]]; then FUNCTION_NAME="${FUNCTION_NAME}_EXCEPTION"; MESSAGE=" exception"; fi
+SCAN_FOR_EXCEPTION_STATUS() {
+    # Check if cypher is listening
+    pid=$(IS_CYPHER_RUNNING) && {
+        # Get current keyblock
+        currentHTxBlockNumber=$(GET_CURRENT_TX_BLOCK)
+        currentDTxBlockNumber=$(HEXADECIMAL_TO_DECIMAL "${currentHTxBlockNumber}")
+        MSG INFO "Current tx block is [${currentDTxBlockNumber}]"
 
+        u_startTxBlock=""; u_endTxBlock=""; while ( (! [[ "${u_startTxBlock}" =~ ^[0-9]+$ ]] || ! [[ "${u_endTxBlock}" =~ ^[0-9]+$ ]]) || ([[ ${u_endTxBlock} -gt ${currentDTxBlockNumber} ]] || [[ ${u_startTxBlock} -gt ${u_endTxBlock} ]]) ); do
+            SHOW_CURSOR
+            printf "\n"
+            $E "Please enter non negative start tx block (integer) and make sure that start does not exceed end, maximum tx block value is ${currentDTxblockNumber}"
+            read -p "Please enter start tx block (enter defaults to 1)              : " u_startTxBlock
+            $E "Please enter non negative end tx block (integer) and make sure that end exceeds or equals start, maximum tx block value is ${currentDTxblockNumber}"
+            read -p "Please enter end tx block (enter defaults to current tx block) : " u_endTxBlock
+            printf "\n"
+            HIDE_CURSOR
+            u_startTxBlock=${u_startTxBlock:-1}
+            u_endTxBlock=${u_endTxBlock:-${currentDTxBlockNumber}}
+        done
+
+        MSG INFO "Start scan for tx block ${u_startTxBlock} to ${u_endTxBlock} this may take a while"
+        # Maximum bar length, current bar length
+        barmax=100; barcurrent=1
+        # Blocks to scan from start
+        blocks=$((${u_endTxBlock}-${u_startTxBlock}))
+        # Modulo round up
+        mod=$(((${blocks}+(${barmax}-1))/${barmax}))
+        # Increase bar with step
+        (( barstep = $((${barmax}/${blocks}))==0 ? 1 : $((${barmax}/${blocks}))))
+        # Counters
+        counter=1; exceptioncounter=0
+
+        # Create a temp file
+        tempfile=$(mktemp)
+
+        HIDE_CURSOR; stty -echo
+        while [ ${counter} -le ${blocks} ]; do
+            if [[ $((${counter}%${mod})) -eq 0 ]]; then
+                if [[ ${barcurrent} -ge ${barmax} ]]; then barcurrent=barmax; else barcurrent=$((${barcurrent}+${barstep})); fi
+            fi
+
+            block=$((${u_startTxBlock}+${counter}))
+            hex=$(DECIMAL_TO_HEXADECIMAL "${block}")
+
+            innerBar=$(printf "="'%.s' $(eval "echo {1.."$((${barcurrent}))"}"))
+            outerBar="${CPurple}${BCGreen}|"$(printf %-101s ${innerBar})"| $(printf %-2s ${block}/${counter})${NOCOL}"
+            echo -ne "${outerBar}\033[0K\r"
+
+            if IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hex}" "${_coinBase}"; then
+               : $((exceptioncounter++))
+               echo "TX BLOCK ${block} ${hex} ${_coinBase} in committee exception" >> ${tempfile}
+            fi
+            : $((counter++))
+        done
+        echo -ne "\033[0K\r"
+
+        if [[ ${exceptioncounter} -gt 0 ]]; then
+            MSG WARNING "Found [${exceptioncounter}] tx exceptions in tx block [${u_startTxBlock}] through [${u_endTxBlock}] for coinbase [${_coinBase}]"
+            SHOW_CURSOR; stty echo
+            # Ask to show result details
+            while true; do
+                read -p "Display details? [Yes/No]: " yn
+                case $yn in
+                    [Yy]* ) cat ${tempfile}
+                            break;;
+                    [Nn]* ) exit;;
+                    * ) echo "Please enter y[es] or n[o].";;
+                esac
+            done
+            HIDE_CURSOR
+        else
+            MSG INFO "Found no tx exceptions in tx block [${u_startTxBlock}] through [${u_endTxBlock}] for coinbase [${_coinBase}]"
+        fi
+
+        # remove temp file
+        temp_file=$(mktemp)
+    } || {
+        MSG WARNING "Can't scan when miner process is not running"
+    }
+}
+
+SCAN_FOR_STATUS() {
     # Check if cypher is listening
     pid=$(IS_CYPHER_RUNNING) && {
         # Get current keyblock
@@ -398,10 +482,10 @@ SCAN_FOR_STATUS() {
 
         for p in $(eval echo "{${u_startKeyBlock}..${u_endKeyBlock}}"); do
             hex=$(DECIMAL_TO_HEXADECIMAL "${p}")
-            ${FUNCTION_NAME} "${hex}" "${_coinBase}" && {
-               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} in committee${MESSAGE}"
+            IS_COINBASE_IN_COMMITTEE "${hex}" "${_coinBase}" && {
+               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} in committee"
             } || {
-               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} not in committee${MESSAGE}"
+               MSG INFO "KEY BLOCK ${p} ${hex} ${_coinBase} not in committee"
             }
         done
     } || {
@@ -584,7 +668,6 @@ HIGHLIGHT_SELECTION() {
     REFRESH
     INVERT
     ${menuItem}
-    #$b
     cur=$(MENU_ARROW)
 }
 
@@ -592,7 +675,6 @@ ESCAPE_TO_MAIN() {
     INVERT
     $e "ENTER = main menu"
     stty -echo
-    #$b
     read
     INIT
 }
@@ -765,7 +847,7 @@ while [[ "$O" != " " ]]; do
            if [[ $cur == enter ]]; then
                FULLRESET_TERMINAL
                HIDE_CURSOR
-               SCAN_FOR_STATUS "EXCEPTION"
+               SCAN_FOR_EXCEPTION_STATUS
                ESCAPE_TO_MAIN
            fi
            ;;
