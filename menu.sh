@@ -261,7 +261,15 @@ _START_MINER() {
             MSG INFO "Miner currently stopped, please enter credentials."
             minerResponse="X"; while [[ "${minerResponse}" != "null" ]]; do
                 SHOW_CURSOR
-                printf "\n"; read -p    "Please enter coinbase address: " u_coinbase
+                if [[ -z "${_coinBase}" ]]; then
+                    SHOW_CURSOR
+                    printf "\n"; read -p    "Please enter coinbase address: " u_coinbase
+                    HIDE_CURSOR
+                else
+                    MSG INFO "Found coinbase: ${_coinBase}"
+                    u_coinbase="${_coinBase}"
+                fi
+                SHOW_CURSOR
                 read -s -p "Please enter password        : " u_password; printf "\n"
                 HIDE_CURSOR
                 minerResponse=$(RPC_START_MINER "${u_coinbase}" "${u_password}")
