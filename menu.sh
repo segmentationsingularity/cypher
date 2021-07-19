@@ -316,6 +316,7 @@ START_MINER() {
             : $((secWait--))
         done
         echo -ne "\033[0K\r"
+        if [[ -z ${_coinBase} ]]; then _coinBase=$(GET_COINBASE); fi
     }
 
     # start miner process
