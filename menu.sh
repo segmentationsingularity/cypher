@@ -3,7 +3,7 @@
 #
 # Script         :                    menu.sh
 # Description    :                    Simple bash convenience menu.
-# version        :                    0.2
+# version        :                    0.3
 # Initial Authors:                    CODE_ERROR
 # Initial Date   :                    2021.07.01
 # Initial Source :                    -
@@ -19,6 +19,9 @@ RPC_PORT=8000
 # External cypher ports
 RNET_PORT=7100
 P2P_PORT=6000
+
+# default log name
+logfile=cypherlog.txt
 
 #---------------------------------------------------------------------------------------
 # End user varables
@@ -64,7 +67,7 @@ ESC=$($e "\e")
 
 # Init
 i=0
-LM=8
+LM=9
 _coinBase=""
 
 ###############################################
@@ -99,6 +102,9 @@ MSG() {
     fi
 }
 
+SHOW_LOG() {
+    more -d "${1}"
+}
 IS_CYPHER_RUNNING() {
     pid=$(pgrep cypher) 2>/dev/null && {
         echo "${pid}"
@@ -397,41 +403,52 @@ SCAN_FOR_EXCEPTION_STATUS() {
             u_endTxBlock=${u_endTxBlock:-${currentDTxBlockNumber}}
         done
 
-        MSG INFO "Start scan for tx block ${u_startTxBlock} to ${u_endTxBlock} this may take a while"
         # Maximum bar length, current bar length
         barmax=100; barcurrent=1
-        # Blocks to scan from start
-        blocks=$((${u_endTxBlock}-${u_startTxBlock}))
-        # Modulo round up
-        mod=$(((${blocks}+(${barmax}-1))/${barmax}))
-        # Increase bar with step
-        (( barstep = $((${barmax}/${blocks}))==0 ? 1 : $((${barmax}/${blocks}))))
+
         # Counters
         counter=1; exceptioncounter=0
 
         # Create a temp file
         tempfile=$(mktemp)
 
-        HIDE_CURSOR; stty -echo
-        while [ ${counter} -le ${blocks} ]; do
-            if [[ $((${counter}%${mod})) -eq 0 ]]; then
-                if [[ ${barcurrent} -ge ${barmax} ]]; then barcurrent=barmax; else barcurrent=$((${barcurrent}+${barstep})); fi
-            fi
-
-            block=$((${u_startTxBlock}+${counter}))
-            hex=$(DECIMAL_TO_HEXADECIMAL "${block}")
-
-            innerBar=$(printf "="'%.s' $(eval "echo {1.."$((${barcurrent}))"}"))
-            outerBar="${CPurple}${BCGreen}|"$(printf %-101s ${innerBar})"| $(printf %-2s ${block}/${counter})${NOCOL}"
-            echo -ne "${outerBar}\033[0K\r"
-
+        # Blocks to scan from start, or the same block
+        if [[ ${u_endTxBlock} -eq ${u_startTxBlock} ]]; then
+            MSG INFO "Start scan for tx block ${u_startTxBlock} to ${u_endTxBlock}"
+            hex=$(DECIMAL_TO_HEXADECIMAL "${u_endTxBlock}")
             if IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hex}" "${_coinBase}"; then
                : $((exceptioncounter++))
-               echo "TX BLOCK ${block} ${hex} ${_coinBase} in committee exception" >> ${tempfile}
+               echo "TX BLOCK ${u_endTxBlock} ${hex} ${_coinBase} in committee exception" >> ${tempfile}
             fi
-            : $((counter++))
-        done
-        echo -ne "\033[0K\r"
+        else
+            MSG INFO "Start scan for tx block ${u_startTxBlock} to ${u_endTxBlock} this may take a while"
+            blocks=$((${u_endTxBlock}-${u_startTxBlock}))
+            # Modulo round up
+            mod=$(((${blocks}+(${barmax}-1))/${barmax}))
+            # Increase bar with step ERROR
+            ((barstep = $((${barmax}/${blocks}))==0 ? 1 : $((${barmax}/${blocks}))))
+
+            HIDE_CURSOR; stty -echo
+            while [ ${counter} -le ${blocks} ]; do
+                if [[ $((${counter}%${mod})) -eq 0 ]]; then
+                    if [[ ${barcurrent} -ge ${barmax} ]]; then barcurrent=barmax; else barcurrent=$((${barcurrent}+${barstep})); fi
+                fi
+
+                block=$((${u_startTxBlock}+${counter}))
+                hex=$(DECIMAL_TO_HEXADECIMAL "${block}")
+
+                innerBar=$(printf "="'%.s' $(eval "echo {1.."$((${barcurrent}))"}"))
+                outerBar="${CPurple}${BCGreen}|"$(printf %-101s ${innerBar})"| $(printf %-2s ${block}/${u_endTxBlock})${NOCOL}"
+                echo -ne "${outerBar}\033[0K\r"
+
+                if IS_COINBASE_IN_COMMITTEE_EXCEPTION "${hex}" "${_coinBase}"; then
+                    : $((exceptioncounter++))
+                    echo "TX BLOCK ${block} ${hex} ${_coinBase} in committee exception" >> ${tempfile}
+                fi
+                : $((counter++))
+            done
+            echo -ne "\033[0K\r"
+        fi
 
         if [[ ${exceptioncounter} -gt 0 ]]; then
             MSG WARNING "Found [${exceptioncounter}] tx exceptions in tx block [${u_startTxBlock}] through [${u_endTxBlock}] for coinbase [${_coinBase}]"
@@ -536,7 +553,7 @@ FULLRESET_TERMINAL() {
 
 MENU_HEADER() {
     # Draw the sides of the menu
-    for each in $(seq 1 22);do
+    for each in $(seq 1 23);do
         $E "   \xE2\x94\x82                                                              \xE2\x94\x82 "
     done
 
@@ -566,13 +583,13 @@ MENU_HEADER() {
     $E "\033[36m                         SELECT OPTION                        \033[0m"
     UNINVERT
 
-    INVERT; POSITION 9 5; $E "\033[94m     CONTROL\033[0m"; UNINVERT
-    INVERT; POSITION 15 5; $E "\033[94m     CHECKS\033[0m"; UNINVERT
+    INVERT; POSITION 10 5; $E "\033[94m     CONTROL\033[0m"; UNINVERT
+    INVERT; POSITION 16 5; $E "\033[94m     CHECKS\033[0m"; UNINVERT
 }
 
 MENU_FOOTER() {
     INVERT
-    POSITION 22 5
+    POSITION 23 5
     $E "\033[36m              UP \xE2\x86\x91 \xE2\x86\x93 DOWN  \xe2\x86\xb5 ENTER - SELECT,NEXT              \033[0m"
     UNINVERT
 }
@@ -722,6 +739,11 @@ M7() {
 
 M8() {
     POSITION 20 10
+    $e "Show log"
+}
+
+M9() {
+    POSITION 21 10
     $e "EXIT"
 }
 
@@ -852,6 +874,15 @@ while [[ "$O" != " " ]]; do
            fi
            ;;
         8) menuItem=M8
+           HIGHLIGHT_SELECTION
+           if [[ $cur == enter ]]; then
+               FULLRESET_TERMINAL
+               HIDE_CURSOR
+               SHOW_LOG "${logfile}"
+               ESCAPE_TO_MAIN
+           fi
+           ;;
+        9) menuItem=M9
            HIGHLIGHT_SELECTION
            if [[ $cur == enter ]]; then
                HIDE_CURSOR
