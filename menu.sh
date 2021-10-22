@@ -32,7 +32,7 @@ UDPportArray=(${RNET_PORT} ${P2P_PORT})
 TCPportArray=(${P2P_PORT})
 
 # Required packages
-packageArray=(openssl libssl-dev curl libgmp-dev jq netcat nmap)
+packageArray=(openssl libssl-dev curl libgmp-dev jq netcat nmap dnsutils)
 
 # expected files
 requiredFiles=(linux/cypher run.sh start.sh resetStart.sh)
